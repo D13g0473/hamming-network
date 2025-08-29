@@ -108,10 +108,10 @@ class HammingNetwork:
         if len(self.labels) != self.M:
             raise ValueError("labels length must match number of prototypes")
         self.epsilon = epsilon if epsilon is not None else 1.0 / (10.0 * self.M)
-
+    # calculate hamming similarity
     def _similarity(self, x_bipolar):
         return self.P @ x_bipolar
-
+    # maxnet implementation to find the winner
     def _maxnet(self, s, max_iters=1000, tol=1e-6):
         y = np.maximum(s.copy(), 0.0)
         eps = self.epsilon
