@@ -6,17 +6,18 @@ import sys
 
 # 1) Crear red para tamaño N
 
-N                   = int(input("ingrese dimension de la tabla:"))
+N                   = int(input("ingrese dimension de la tabla: "))
 noise               = float(input("ingrese nivel de ruido (0 a 1): "))
-figura              = int(input("ingrese figura prototipo:"))
-net, labels, protos = hs.make_network(N)  # protos: [5, N, N] en binario (0/1)
+figura              = int(input("ingrese figura prototipo : circulo -> 0, cuadrado -> 1 , estrella -> 2,  triangulo -> 3, corazon -> 4 : "))
+rotations           = int(input("ingrese cantidad de rotaciones (0 a 3): "))
+net, labels, protos = hs.make_network(N)  
 
 x = protos[figura]
 # 3) Probar con ruido
 x_noisy = hs.add_noise(x, noise)
 # prediccion normal
 print("prediccion con ruido:") 
-print(net.predict(x_noisy))                       # -> 'circulo'
+print(net.predict(x_noisy))
 print("prediccion con ruido y rotacion:")
 # prediccion con rotacion
 rotada = np.rot90(x_noisy, k=2)
