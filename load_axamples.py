@@ -1,6 +1,6 @@
 import os
 import numpy as np
-import load_prototypes_kmeans as lpk
+import extraer_prototipos as lpk
 
 def load_patterns_from_csv(base_path):
     patrones = {}
@@ -24,7 +24,7 @@ def load_patterns_from_csv(base_path):
             # promedio
             promedio = np.mean(ejemplos, axis=0)
             # umbralizar a binario
-            binario = (promedio >= 0.24).astype(int)
+            binario = (promedio >= 0.30).astype(int)
             # convertir a bipolar
             bipolar = np.where(binario == 0, -1, 1)
             

@@ -10,7 +10,7 @@ N                   = int(input("ingrese dimension de la tabla: "))
 noise               = float(input("ingrese nivel de ruido (0 a 1): "))
 figura              = int(input("ingrese figura prototipo : circulo -> 0, cuadrado -> 1 , estrella -> 2,  triangulo -> 3, corazon -> 4 : "))
 rotations           = int(input("ingrese cantidad de rotaciones (0 a 3): "))
-net, labels, protos = hs.make_network(N)  
+net, labels, protos = hs.make_network(N)
 
 x = protos[figura]
 # 3) Probar con ruido

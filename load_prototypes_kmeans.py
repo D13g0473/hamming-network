@@ -210,6 +210,28 @@ def ascii_show(arr, shape=(28,28)):
     lines = ["".join(row) for row in chars]
     return "\n".join(lines)
 
+def extract_prototypes_as_dict(dataset_dir, k_per_class=3, method="kmedoids", random_state=None):
+    """
+    Versión adaptada que devuelve como load_patterns_from_csv:
+      - patrones: dict {clase: vector_bipolar}
+      - etiquetas: list de clases
+    """
+    protos_bip, labels, protos_bin, sample_shape = extract_representative_prototypes(
+        dataset_dir, k_per_class=k_per_class, method=method, random_state=random_state
+    )
+
+    patrones = {}
+    clases_vistas = set()
+    etiquetas = []
+
+    for proto, label in zip(protos_bip, labels):
+        if label not in clases_vistas:
+            patrones[label] = proto.flatten()
+            etiquetas.append(label)
+            clases_vistas.add(label)
+
+    return patrones, etiquetas
+
 if __name__ == "__main__":
     # ejemplo de uso
     dataset_dir = "dataset"   # estructura: dataset/<clase>/*.csv

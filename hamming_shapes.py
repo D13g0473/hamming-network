@@ -1,6 +1,33 @@
 # hamming_shapes.py
 from math import cos, sin, pi, sqrt
 import numpy as np
+from load_axamples import load_patterns_from_csv  
+from load_prototypes_kmeans import extract_prototypes_as_dict
+
+def make_network_from_csv(base_path):
+    patrones, etiquetas = load_patterns_from_csv(base_path)
+    # Convertimos a array de prototipos
+    protos = np.stack([patrones[e] for e in etiquetas], axis=0).astype(np.float32)
+    net = HammingNetwork(protos, labels=etiquetas)
+    return net, etiquetas, protos
+
+def make_network_from_csv_kmedoids(base_path):
+    patrones, etiquetas = extract_prototypes_as_dict(base_path, k_per_class=3, method="kmedoids", random_state=0)
+    protos = np.stack([patrones[e] for e in etiquetas], axis=0).astype(np.float32)
+    net = HammingNetwork(protos, labels=etiquetas)
+    return net, etiquetas, protos
+
+def make_network_from_csv_topk(base_path):
+    patrones, etiquetas = extract_prototypes_as_dict(base_path, k_per_class=3, method="topk", random_state=0)
+    protos = np.stack([patrones[e] for e in etiquetas], axis=0).astype(np.float32)
+    net = HammingNetwork(protos, labels=etiquetas)
+    return net, etiquetas, protos
+
+def make_network_from_csv_kmeans(base_path):
+    patrones, etiquetas = extract_prototypes_as_dict(base_path, k_per_class=3, method="kmeans", random_state=0)
+    protos = np.stack([patrones[e] for e in etiquetas], axis=0).astype(np.float32)
+    net = HammingNetwork(protos, labels=etiquetas)
+    return net, etiquetas, protos   
 
 def _grid_coords(N):
     lin = np.linspace(-1, 1, N)
