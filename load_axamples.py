@@ -1,5 +1,6 @@
 import os
 import numpy as np
+import load_prototypes_kmeans as lpk
 
 def load_patterns_from_csv(base_path):
     patrones = {}
@@ -23,7 +24,7 @@ def load_patterns_from_csv(base_path):
             # promedio
             promedio = np.mean(ejemplos, axis=0)
             # umbralizar a binario
-            binario = (promedio >= 0.5).astype(int)
+            binario = (promedio >= 0.24).astype(int)
             # convertir a bipolar
             bipolar = np.where(binario == 0, -1, 1)
             
@@ -37,4 +38,5 @@ base_path = "dataset"
 patrones, etiquetas = load_patterns_from_csv(base_path)
 
 for nombre, patron in patrones.items():
-    print(f"Patrón para {nombre}: {patron}")
+    print(f"Patrón para {nombre}")
+    print(lpk.ascii_show(patron, shape=(28,28))) 
