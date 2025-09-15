@@ -1,5 +1,6 @@
 import tkinter as tk
 import numpy as np
+from tkinter import filedialog, messagebox
 from center_script import center_image
 import hamming_shapes as hs
 
@@ -13,28 +14,16 @@ modelos = [
     "prototypes/base_topk.npz"
 ]
 
-print("Seleccione el modelo:")
-for i, m in enumerate(modelos):
-    print(f"{i}: {m}")
+try:
+    print("Seleccione el modelo:")
+    for i, m in enumerate(modelos):
+        print(f"{i}: {m}")
 
-idx = int(input("Modelo a usar (0-3): "))
-net, labels, protos = hs.load_network_from_file(modelos[idx])
-
-print('seleccione forma de uso:')
-print('1: predecir desde archivo .csv')
-print('2: predecir desde dibujo en pantalla')
-modo = int(input('modo (1-2): '))               
-if modo == 1:
-    archivo = input("Archivo .csv con la figura a reconocer: ")
-    ejemplo = np.loadtxt(archivo, delimiter=",")
-    # binarizar igual que en entrenamiento
-    binario = (ejemplo >= 0.24).astype(int)
-    pred, scores = net.predict(binario.ravel(), return_scores=True)
-    print(f"Predicción: {pred}")
-    print("Scores:", scores)
-    exit(0)
-
-# modo 2: dibujo en pantalla
+    idx = int(input("Modelo a usar (0-3): "))
+    net, labels, protos = hs.load_network_from_file(modelos[idx])
+except Exception as e:
+    print(f"❌ Error cargando modelo: {e}")
+    exit(1)
 
 # --------------------------
 # Parámetros
@@ -44,6 +33,7 @@ cell_size = 20  # tamaño de cada celda en píxeles
 canvas_size = N * cell_size
 
 _, _, protos_p = hs.make_network(N)
+
 # --------------------------
 # Tkinter UI
 # --------------------------
@@ -69,54 +59,95 @@ data = np.zeros((N, N), dtype=np.uint8)
 # --------------------------
 def paint(event):
     """Pinta un cuadrado negro en la celda correspondiente"""
-    x, y = event.x // cell_size, event.y // cell_size
-    if 0 <= x < N and 0 <= y < N:
-        data[y, x] = 1
-        canvas_input.create_rectangle(
-            x * cell_size, y * cell_size,
-            (x + 1) * cell_size, (y + 1) * cell_size,
-            fill="black", outline="black"
-        )
+    try:
+        x, y = event.x // cell_size, event.y // cell_size
+        if 0 <= x < N and 0 <= y < N:
+            data[y, x] = 1
+            canvas_input.create_rectangle(
+                x * cell_size, y * cell_size,
+                (x + 1) * cell_size, (y + 1) * cell_size,
+                fill="black", outline="black"
+            )
+    except Exception as e:
+        messagebox.showerror("Error", f"Error en paint(): {e}")
 
 def clear_canvas():
     """Limpia las pizarras"""
-    global data
-    data.fill(0)
-    canvas_input.delete("all")
-    canvas_output.delete("all")
-    result_label.config(text="Dibuja una figura y presiona Predecir")
-
-def predict_shape():
-    """Convierte la pizarra en vector, centra la figura y predice con la red"""
-    # Centrar la figura
-    centered = center_image(data, size=28).astype(np.uint8)
-
-    # Aplanar para la red
-    bin_arr = centered.ravel()
-
-    # Predicción
-    pred, scores = net.predict(bin_arr, return_scores=True)
-
-    # Mostrar predicción textual
-    result_label.config(text=f"Predicción: {pred}")
-
-    # Dibujar prototipo perfecto en canvas_output
-    canvas_output.delete("all")
     try:
-        idx = labels.index(pred)
-        proto = protos_p[idx].reshape(N, N)  # recuperar figura prototipo
-    except Exception:
-        return
+        global data
+        data.fill(0)
+        canvas_input.delete("all")
+        canvas_output.delete("all")
+        result_label.config(text="Dibuja una figura o carga un CSV")
+    except Exception as e:
+        messagebox.showerror("Error", f"Error en clear_canvas(): {e}")
 
+def draw_matrix_on_canvas(matrix, canvas):
+    """Dibuja una matriz binaria 28x28 en el canvas"""
+    canvas.delete("all")
     for y in range(N):
         for x in range(N):
-            if proto[y, x] > 0:
-                canvas_output.create_rectangle(
+            if matrix[y, x] > 0:
+                canvas.create_rectangle(
                     x * cell_size, y * cell_size,
                     (x + 1) * cell_size, (y + 1) * cell_size,
                     fill="black", outline="black"
                 )
 
+def predict_shape():
+    """Convierte la pizarra en vector, centra la figura y predice con la red"""
+    try:
+        centered = center_image(data, size=28).astype(np.uint8)
+        bin_arr = centered.ravel()
+        pred, scores = net.predict(bin_arr, return_scores=True)
+        result_label.config(text=f"Predicción: {pred}")
+
+        # Dibujar prototipo perfecto
+        canvas_output.delete("all")
+        try:
+            idx = labels.index(pred)
+            proto = protos_p[idx].reshape(N, N)
+            draw_matrix_on_canvas(proto, canvas_output)
+        except Exception:
+            pass
+    except Exception as e:
+        messagebox.showerror("Error", f"Error en predict_shape(): {e}")
+
+def load_csv_and_predict():
+    """Carga un CSV de 28x28 y lo predice"""
+    try:
+        file_path = filedialog.askopenfilename(
+            title="Seleccionar CSV",
+            filetypes=[("CSV Files", "*.csv")]
+        )
+        if not file_path:
+            return
+
+        # Leer CSV
+        ejemplo = np.loadtxt(file_path, delimiter=",")
+        if ejemplo.shape != (28, 28):
+            raise ValueError("El CSV debe ser una matriz 28x28")
+
+        if not np.isin(ejemplo, [0, 1]).all():
+            raise ValueError("El CSV debe contener solo valores 0 y 1")
+
+        # Centrar
+        centered = center_image(ejemplo.astype(np.uint8), size=28)
+
+        # Mostrar figura cargada en canvas_input
+        draw_matrix_on_canvas(centered, canvas_input)
+
+        # Predicción
+        pred, scores = net.predict(centered.ravel(), return_scores=True)
+        result_label.config(text=f"Predicción desde CSV: {pred}")
+
+        # Dibujar prototipo en salida
+        idx = labels.index(pred)
+        proto = protos_p[idx].reshape(N, N)
+        draw_matrix_on_canvas(proto, canvas_output)
+
+    except Exception as e:
+        messagebox.showerror("Error", f"No se pudo cargar el CSV: {e}")
 
 # --------------------------
 # Eventos UI
@@ -132,7 +163,10 @@ btn_clear.grid(row=0, column=0, padx=10)
 btn_predict = tk.Button(btn_frame, text="Predecir", command=predict_shape)
 btn_predict.grid(row=0, column=1, padx=10)
 
-result_label = tk.Label(root, text="Dibuja una figura y presiona Predecir", font=("Arial", 14))
+btn_load_csv = tk.Button(btn_frame, text="Cargar CSV", command=load_csv_and_predict)
+btn_load_csv.grid(row=0, column=2, padx=10)
+
+result_label = tk.Label(root, text="Dibuja una figura o carga un CSV", font=("Arial", 14))
 result_label.pack(pady=10)
 
 # --------------------------
