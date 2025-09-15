@@ -1,5 +1,7 @@
 import tkinter as tk
 import numpy as np
+import cv2
+from scipy.ndimage import binary_opening
 from center_script import center_image
 import hamming_shapes as hs
 
@@ -44,6 +46,7 @@ cell_size = 20  # tamaño de cada celda en píxeles
 canvas_size = N * cell_size
 
 _, _, protos_p = hs.make_network(N)
+
 # --------------------------
 # Tkinter UI
 # --------------------------
@@ -63,6 +66,38 @@ canvas_output.grid(row=0, column=1, padx=10, pady=10)
 
 # Matriz de dibujo
 data = np.zeros((N, N), dtype=np.uint8)
+
+# --------------------------
+# Preprocesamiento
+# --------------------------
+def preprocess(img, size=28):
+    """Centrar, limpiar ruido y escalar figura"""
+    # Centrar
+    centered = center_image(img, size=size).astype(np.uint8)
+
+    # Limpiar ruido (puntos sueltos)
+    clean = binary_opening(centered, structure=np.ones((2,2))).astype(np.uint8)
+
+    # Bounding box para detectar área activa
+    rows = np.any(clean, axis=1)
+    cols = np.any(clean, axis=0)
+    if not rows.any() or not cols.any():
+        return clean  # figura vacía
+
+    ymin, ymax = np.where(rows)[0][[0, -1]]
+    xmin, xmax = np.where(cols)[0][[0, -1]]
+    cropped = clean[ymin:ymax+1, xmin:xmax+1]
+
+    # Escalar figura para que ocupe ~20x20 dentro del 28x28
+    resized = cv2.resize(cropped, (20, 20), interpolation=cv2.INTER_NEAREST)
+
+    # Colocar en canvas vacío de 28x28
+    new_img = np.zeros((size, size), dtype=np.uint8)
+    y_offset = (size - resized.shape[0]) // 2
+    x_offset = (size - resized.shape[1]) // 2
+    new_img[y_offset:y_offset+resized.shape[0], x_offset:x_offset+resized.shape[1]] = resized
+
+    return new_img
 
 # --------------------------
 # Funciones auxiliares
@@ -87,12 +122,12 @@ def clear_canvas():
     result_label.config(text="Dibuja una figura y presiona Predecir")
 
 def predict_shape():
-    """Convierte la pizarra en vector, centra la figura y predice con la red"""
-    # Centrar la figura
-    centered = center_image(data, size=28).astype(np.uint8)
+    """Convierte la pizarra en vector, preprocesa y predice con la red"""
+    # Preprocesar (centrar + limpiar + escalar)
+    processed = preprocess(data, size=28)
 
     # Aplanar para la red
-    bin_arr = centered.ravel()
+    bin_arr = processed.ravel()
 
     # Predicción
     pred, scores = net.predict(bin_arr, return_scores=True)
@@ -116,7 +151,6 @@ def predict_shape():
                     (x + 1) * cell_size, (y + 1) * cell_size,
                     fill="black", outline="black"
                 )
-
 
 # --------------------------
 # Eventos UI

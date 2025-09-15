@@ -183,9 +183,9 @@ def build_prototypes(N):
     shapes = {
         "corazon": shape_heart(N, filled=True, scale=1.0),
         "cuadrado": shape_square(N, size=1.35, filled=True),
-        "estrella": shape_star(N, points=5, filled=True, inner_ratio=0.38, outer_ratio=0.92),
+        "estrella": np.rot90(shape_star(N, points=5, filled=True, inner_ratio=0.38, outer_ratio=0.92), k=2),
         "circulo": shape_circle(N, radius=0.72, filled=True),
-        "triangulo": shape_triangle(N, filled=True),
+        "triangulo": np.rot90( shape_triangle(N, filled=True), k=2),
     }
     labels = list(shapes.keys())
     protos = np.stack([shapes[k].astype(np.uint8).ravel() for k in labels], axis=0)
