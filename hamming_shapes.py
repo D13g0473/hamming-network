@@ -2,6 +2,35 @@
 from math import cos, sin, pi, sqrt
 import numpy as np
 
+def make_network_from_csv(base_path):
+    from load_axamples import load_patterns_from_csv  
+    patrones, etiquetas = load_patterns_from_csv(base_path)
+    # Convertimos a array de prototipos
+    protos = np.stack([patrones[e] for e in etiquetas], axis=0).astype(np.float32)
+    net = HammingNetwork(protos, labels=etiquetas)
+    return net, etiquetas, protos
+
+def make_network_from_csv_kmedoids(base_path):
+    from load_prototypes_kmeans import extract_prototypes_as_dict
+    patrones, etiquetas = extract_prototypes_as_dict(base_path, k_per_class=3, method="kmedoids", random_state=0)
+    protos = np.stack([patrones[e] for e in etiquetas], axis=0).astype(np.float32)
+    net = HammingNetwork(protos, labels=etiquetas)
+    return net, etiquetas, protos
+
+def make_network_from_csv_topk(base_path):
+    from load_prototypes_kmeans import extract_prototypes_as_dict
+    patrones, etiquetas = extract_prototypes_as_dict(base_path, k_per_class=3, method="topk", random_state=0)
+    protos = np.stack([patrones[e] for e in etiquetas], axis=0).astype(np.float32)
+    net = HammingNetwork(protos, labels=etiquetas)
+    return net, etiquetas, protos
+
+def make_network_from_csv_kmeans(base_path):
+    from load_prototypes_kmeans import extract_prototypes_as_dict
+    patrones, etiquetas = extract_prototypes_as_dict(base_path, k_per_class=3, method="kmeans", random_state=0)
+    protos = np.stack([patrones[e] for e in etiquetas], axis=0).astype(np.float32)
+    net = HammingNetwork(protos, labels=etiquetas)
+    return net, etiquetas, protos   
+
 def _grid_coords(N):
     lin = np.linspace(-1, 1, N)
     X, Y = np.meshgrid(lin, -lin)
@@ -108,10 +137,10 @@ class HammingNetwork:
         if len(self.labels) != self.M:
             raise ValueError("labels length must match number of prototypes")
         self.epsilon = epsilon if epsilon is not None else 1.0 / (10.0 * self.M)
-
+    # calculate hamming similarity
     def _similarity(self, x_bipolar):
         return self.P @ x_bipolar
-
+    # maxnet implementation to find the winner
     def _maxnet(self, s, max_iters=1000, tol=1e-6):
         y = np.maximum(s.copy(), 0.0)
         eps = self.epsilon
@@ -149,12 +178,14 @@ class HammingNetwork:
         return self.labels[idx]
 
 def build_prototypes(N):
+
+
     shapes = {
-        "circulo": shape_circle(N, radius=0.72, filled=True),
-        "cuadrado": shape_square(N, size=1.35, filled=True),
-        "estrella": shape_star(N, points=5, filled=True, inner_ratio=0.38, outer_ratio=0.92),
-        "triangulo": shape_triangle(N, filled=True),
         "corazon": shape_heart(N, filled=True, scale=1.0),
+        "cuadrado": shape_square(N, size=1.35, filled=True),
+        "estrella": np.rot90(shape_star(N, points=5, filled=True, inner_ratio=0.38, outer_ratio=0.92), k=2),
+        "circulo": shape_circle(N, radius=0.72, filled=True),
+        "triangulo": np.rot90( shape_triangle(N, filled=True), k=2),
     }
     labels = list(shapes.keys())
     protos = np.stack([shapes[k].astype(np.uint8).ravel() for k in labels], axis=0)
@@ -176,18 +207,42 @@ def add_noise(x_bin, flip_prob=0.05, rng=None):
     noise = rng.random(x_bin.shape) < flip_prob
     return (x_bin ^ noise.astype(np.uint8)).astype(np.uint8)
 
+
+
+
+def save_prototypes(filepath, labels, protos):
+    """
+    Guarda etiquetas y prototipos en formato .npz
+    """
+    import os
+    os.makedirs(os.path.dirname(filepath), exist_ok=True)
+    np.savez(filepath, labels=np.array(labels), protos=protos)
+    print(f"✅ Prototipos guardados en {filepath}")
+
+def load_network_from_file(filepath):
+    """
+    Carga etiquetas y prototipos desde .npz y arma una red Hamming
+    """
+    data = np.load(filepath, allow_pickle=True)
+    labels = list(data["labels"])
+    protos = data["protos"].astype(np.float32)
+    protos_bip = to_bipolar(protos)
+    net = HammingNetwork(protos_bip, labels=labels)
+    return net, labels, protos
+
 if __name__ == "__main__":
-    # Demo
-    N = 25
-    net, labels, protos = make_network(N)
-    print("Clases:", labels)
-    for name, proto in zip(labels, protos):
-        pred, scores = net.predict(proto, return_scores=True)
-        print(f"Proto {name:9s} -> pred={pred:9s} | scores={np.round(scores,2)}")
-    # Noisy test
-    import numpy as np
-    rng = np.random.default_rng(0)
-    for name, proto in zip(labels, protos):
-        noisy = add_noise(proto, flip_prob=0.08, rng=rng)
-        pred, scores = net.predict(noisy, return_scores=True)
-        print(f"Noisy {name:9s} -> pred={pred:9s} | max score={np.max(scores):.2f}")
+    # Crear red con prototipos para guardar con una media ponderada mayor al 0.3
+    net, labels, protos = make_network_from_csv("dataset_centered")
+    save_prototypes("prototypes/base_media.npz", labels, protos.reshape(len(labels), -1))
+
+    
+    # Crear red con prototipos para guardar con el calculo de kmeans, kmedoids y topk
+
+    net, labels, protos = make_network_from_csv_kmeans("dataset_centered")
+    save_prototypes("prototypes/base_kmeans.npz", labels, protos.reshape(len(labels), -1))
+    
+    net, labels, protos = make_network_from_csv_kmedoids("dataset_centered")
+    save_prototypes("prototypes/base_kmedoids.npz", labels, protos.reshape(len(labels), -1))
+
+    net, labels, protos = make_network_from_csv_topk("dataset_centered")
+    save_prototypes("prototypes/base_topk.npz", labels, protos.reshape(len(labels), -1))
