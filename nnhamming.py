@@ -19,7 +19,7 @@ try:
     for i, m in enumerate(modelos):
         print(f"{i}: {m}")
 
-    idx = int(input("Modelo a usar (0-3): "))
+    idx = int(input("Modelo a usar (0-3) opcion remomendada -> 0 :"))
     net, labels, protos = hs.load_network_from_file(modelos[idx])
 except Exception as e:
     print(f"❌ Error cargando modelo: {e}")
