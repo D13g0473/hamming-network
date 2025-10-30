@@ -4,8 +4,8 @@ from hamming_shapes import make_network_from_csv
 
 
 def excecute_tests():
-    train_path = "dataset_extra_feature"        # contiene ejemplos para calcular
-    test_path = "dataset_test_extra_feature"    # contiene ejemplos para evaluación
+    train_path = "dataset_centered"        # contiene ejemplos para calcular
+    test_path = "dataset_test_centered"    # contiene ejemplos para evaluación
 
     print("Evaluando modelo base con invariancia rotacional y escalado")
     print("=" * 60)
@@ -111,7 +111,7 @@ def excecute_tests():
 
     # Reporte detallado
     print("\n📑 Reporte de clasificación:")
-    print(classification_report(y_true, y_pred, labels=labels_sorted))
+    print(classification_report(y_true, y_pred, labels=labels_sorted, zero_division=0))
 
     # Solo evaluar el modelo base con todas las mejoras
     print("\n✅ Modelo base con invariancia rotacional y escalado evaluado exitosamente")
