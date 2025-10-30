@@ -114,10 +114,30 @@ python3 analyze_threshold.py
 - ✅ Análisis de threshold óptimo con gráficos
 
 ## Limitaciones
-- ❌ Resolución fija: 28×28 píxeles
-- ❌ No generaliza a imágenes complejas/no geométricas
-- ❌ Depende de calidad de prototipos de entrenamiento
-- ❌ Interfaz gráfica básica (Tkinter)
+
+### Limitaciones Técnicas de la Red de Hamming
+- **Arquitectura básica**: Red de 2 capas (entrada + competición) sin aprendizaje adaptativo
+- **Función de distancia**: Solo usa distancia de Hamming binaria, no considera importancia relativa de píxeles
+- **Codificación bipolar**: Convierte todo a -1/+1, perdiendo información de intensidad/gradiente
+- **Competencia MaxNet**: Selección winner-takes-all puede ser sensible a puntuaciones similares
+- **Sin memoria temporal**: No aprende de secuencias o contexto temporal
+
+### Limitaciones del Proyecto Específico
+- ❌ **Resolución fija**: 28×28 píxeles, no maneja imágenes de diferentes tamaños
+- ❌ **Dominio limitado**: Solo figuras geométricas simples, no generaliza a formas complejas
+- ❌ **Dependencia de prototipos**: Calidad de clasificación depende directamente de los prototipos de entrenamiento
+- ❌ **Sin aprendizaje incremental**: No puede aprender nuevas clases sin regenerar todos los prototipos
+- ❌ **Sensibilidad al ruido**: Aunque tiene preprocesamiento, ruido severo puede confundir la clasificación
+- ❌ **Invariancia limitada**: Rotaciones solo en múltiplos de 90°, escalas discretas
+- ❌ **Interfaz básica**: Tkinter limita usabilidad y no soporta gestos complejos
+- ❌ **Sin validación cruzada**: Evaluación simple train/test, sin k-fold validation
+
+### Limitaciones Teóricas de las Redes de Hamming
+- **No óptimas para datasets grandes**: Complejidad O(M×D) donde M=número de prototipos
+- **No jerárquicas**: No pueden aprender características composicionales
+- **Sensibles a dimensionalidad**: Rendimiento decae con vectores de entrada muy largos
+- **No probabilísticas**: No proporcionan confidence scores calibrados
+- **No manejan outliers**: Cualquier entrada se clasifica en alguna clase existente
 
 ---
 
