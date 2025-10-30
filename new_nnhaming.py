@@ -4,37 +4,20 @@ import cv2
 from scipy.ndimage import binary_opening
 from center_script import center_image
 import hamming_shapes as hs
+from scipy import ndimage
 
 # --------------------------
 # Configuración inicial
 # --------------------------
-modelos = [
-    "prototypes/base_media.npz",
-    "prototypes/base_kmeans.npz",
-    "prototypes/base_kmedoids.npz",
-    "prototypes/base_topk.npz"
-]
+modelo = "prototypes/base_media.npz"
 
-print("Seleccione el modelo:")
-for i, m in enumerate(modelos):
-    print(f"{i}: {m}")
+print(f"Usando modelo base con threshold optimizado: {modelo}")
+net, labels, protos = hs.load_network_from_file(modelo)
 
-idx = int(input("Modelo a usar (0-3): "))
-net, labels, protos = hs.load_network_from_file(modelos[idx])
-
-print('seleccione forma de uso:')
-print('1: predecir desde archivo .csv')
-print('2: predecir desde dibujo en pantalla')
-modo = int(input('modo (1-2): '))               
-if modo == 1:
-    archivo = input("Archivo .csv con la figura a reconocer: ")
-    ejemplo = np.loadtxt(archivo, delimiter=",")
-    # binarizar igual que en entrenamiento
-    binario = (ejemplo >= 0.24).astype(int)
-    pred, scores = net.predict(binario.ravel(), return_scores=True)
-    print(f"Predicción: {pred}")
-    print("Scores:", scores)
-    exit(0)
+print('Modo: dibujo en pantalla con todas las mejoras activadas')
+print('- Preprocesamiento con detección de bordes Sobel')
+print('- Invariancia rotacional (4 rotaciones)')
+print('- Invariancia escalado (5 factores)')
 
 # modo 2: dibujo en pantalla
 
@@ -70,13 +53,31 @@ data = np.zeros((N, N), dtype=np.uint8)
 # --------------------------
 # Preprocesamiento
 # --------------------------
-def preprocess(img, size=28):
-    """Centrar, limpiar ruido y escalar figura"""
+def preprocess(img, size=28, use_sobel=False):
+    """Centrar, limpiar ruido, detectar bordes y escalar figura"""
     # Centrar
     centered = center_image(img, size=size).astype(np.uint8)
 
     # Limpiar ruido (puntos sueltos)
     clean = binary_opening(centered, structure=np.ones((2,2))).astype(np.uint8)
+
+    if use_sobel:
+        # Aplicar detección de bordes Sobel
+        # Convertir a float para cálculo de gradientes
+        img_float = clean.astype(np.float64)
+
+        # Filtros Sobel
+        sobel_x = ndimage.sobel(img_float, axis=0)
+        sobel_y = ndimage.sobel(img_float, axis=1)
+
+        # Magnitud del gradiente
+        magnitude = np.sqrt(sobel_x**2 + sobel_y**2)
+
+        # Normalizar y umbralizar
+        magnitude = (magnitude / magnitude.max() * 255).astype(np.uint8)
+        # Umbralizar para obtener bordes binarios
+        _, edges = cv2.threshold(magnitude, 50, 255, cv2.THRESH_BINARY)
+        clean = edges.astype(np.uint8)
 
     # Bounding box para detectar área activa
     rows = np.any(clean, axis=1)
@@ -123,24 +124,29 @@ def clear_canvas():
 
 def predict_shape():
     """Convierte la pizarra en vector, preprocesa y predice con la red"""
-    # Preprocesar (centrar + limpiar + escalar)
-    processed = preprocess(data, size=28)
+    # Preprocesar (centrar + limpiar + detectar bordes + escalar)
+    processed = preprocess(data, size=28, use_sobel=True)
 
     # Aplanar para la red
     bin_arr = processed.ravel()
 
-    # Predicción
-    pred, scores = net.predict(bin_arr, return_scores=True)
+    # Predicción con invariancia rotacional y escalado
+    pred, scores = net.predict(bin_arr, return_scores=True, use_rotation_invariance=True, use_scaling_invariance=True)
 
     # Mostrar predicción textual
     result_label.config(text=f"Predicción: {pred}")
 
-    # Dibujar prototipo perfecto en canvas_output
+    # Dibujar prototipo correspondiente al modelo seleccionado en canvas_output
     canvas_output.delete("all")
     try:
         idx = labels.index(pred)
-        proto = protos_p[idx].reshape(N, N)  # recuperar figura prototipo
-    except Exception:
+        # Usar los prototipos del modelo cargado, no los de make_network
+        if protos.ndim == 3:  # Si está en formato (N_shapes, H, W)
+            proto = protos[idx]
+        else:  # Si está en formato (N_shapes, H*W), reshape
+            proto = protos[idx].reshape(N, N)
+    except Exception as e:
+        print(f"Error al acceder al prototipo: {e}")
         return
 
     for y in range(N):

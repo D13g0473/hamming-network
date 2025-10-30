@@ -10,26 +10,6 @@ def make_network_from_csv(base_path):
     net = HammingNetwork(protos, labels=etiquetas)
     return net, etiquetas, protos
 
-def make_network_from_csv_kmedoids(base_path):
-    from load_prototypes_kmeans import extract_prototypes_as_dict
-    patrones, etiquetas = extract_prototypes_as_dict(base_path, k_per_class=3, method="kmedoids", random_state=0)
-    protos = np.stack([patrones[e] for e in etiquetas], axis=0).astype(np.float32)
-    net = HammingNetwork(protos, labels=etiquetas)
-    return net, etiquetas, protos
-
-def make_network_from_csv_topk(base_path):
-    from load_prototypes_kmeans import extract_prototypes_as_dict
-    patrones, etiquetas = extract_prototypes_as_dict(base_path, k_per_class=3, method="topk", random_state=0)
-    protos = np.stack([patrones[e] for e in etiquetas], axis=0).astype(np.float32)
-    net = HammingNetwork(protos, labels=etiquetas)
-    return net, etiquetas, protos
-
-def make_network_from_csv_kmeans(base_path):
-    from load_prototypes_kmeans import extract_prototypes_as_dict
-    patrones, etiquetas = extract_prototypes_as_dict(base_path, k_per_class=3, method="kmeans", random_state=0)
-    protos = np.stack([patrones[e] for e in etiquetas], axis=0).astype(np.float32)
-    net = HammingNetwork(protos, labels=etiquetas)
-    return net, etiquetas, protos   
 
 def _grid_coords(N):
     lin = np.linspace(-1, 1, N)
@@ -158,7 +138,7 @@ class HammingNetwork:
                 break
         return y
 
-    def predict(self, x_binary, use_maxnet=True, return_scores=False):
+    def predict(self, x_binary, use_maxnet=True, return_scores=False, use_rotation_invariance=False, use_scaling_invariance=False, scale_factors=None):
         x = np.asarray(x_binary)
         if x.ndim == 2:
             x = x.ravel()
@@ -166,15 +146,80 @@ class HammingNetwork:
             raise ValueError("x_binary must be 1D or 2D array")
         if x.size != self.D:
             raise ValueError(f"Input dimension {x.size} does not match prototype dimension {self.D}")
-        x_b = to_bipolar(x.astype(np.uint8))
-        s = self._similarity(x_b)
-        if use_maxnet:
-            y = self._maxnet(s)
-            idx = int(np.argmax(y))
+        x_bin = x.astype(np.uint8)
+
+        # Handle scaling invariance
+        if use_scaling_invariance:
+            # Assume square grid, e.g., 28x28
+            N = int(np.sqrt(self.D))
+            if N * N != self.D:
+                raise ValueError("Scaling invariance requires square grid dimension")
+            x_2d = x_bin.reshape(N, N)
+
+            if scale_factors is None:
+                scale_factors = [0.8, 0.9, 1.0, 1.1, 1.2]  # Default scale factors
+
+            scaled_versions = []
+            for scale in scale_factors:
+                if scale == 1.0:
+                    scaled_versions.append(x_2d)
+                else:
+                    # Resize using nearest neighbor interpolation
+                    new_size = int(N * scale)
+                    if new_size < 5:  # Minimum size to avoid degenerate images
+                        continue
+                    scaled = np.zeros((N, N), dtype=np.uint8)
+                    scaled_img = np.zeros((new_size, new_size), dtype=np.uint8)
+
+                    # Simple scaling by replicating pixels
+                    if scale > 1.0:  # Upscaling
+                        scaled_img = x_2d.repeat(int(scale), axis=0).repeat(int(scale), axis=1)[:N, :N]
+                    else:  # Downscaling
+                        step = int(1.0 / scale)
+                        scaled_img = x_2d[::step, ::step][:new_size, :new_size]
+
+                    # Center the scaled image
+                    y_offset = (N - scaled_img.shape[0]) // 2
+                    x_offset = (N - scaled_img.shape[1]) // 2
+                    scaled[y_offset:y_offset+scaled_img.shape[0], x_offset:x_offset+scaled_img.shape[1]] = scaled_img
+                    scaled_versions.append(scaled)
+
+            x_versions = scaled_versions
+        elif use_rotation_invariance:
+            # Assume square grid, e.g., 28x28
+            N = int(np.sqrt(self.D))
+            if N * N != self.D:
+                raise ValueError("Rotation invariance requires square grid dimension")
+            x_2d = x_bin.reshape(N, N)
+
+            # Test 4 rotations: 0°, 90°, 180°, 270°
+            rotations = [x_2d, np.rot90(x_2d, k=1), np.rot90(x_2d, k=2), np.rot90(x_2d, k=3)]
+            x_versions = rotations
         else:
-            idx = int(np.argmax(s))
+            x_versions = [x_bin.reshape(int(np.sqrt(self.D)), int(np.sqrt(self.D)))]
+
+        # Aggregate predictions across all versions
+        scores_accum = np.zeros(self.M, dtype=np.float32)
+        for x_ver in x_versions:
+            x_b = to_bipolar(x_ver.ravel())
+            s = self._similarity(x_b)
+            if use_maxnet:
+                y = self._maxnet(s)
+                scores_accum += y
+            else:
+                scores_accum += s
+
+        # Average scores across versions
+        scores_accum /= len(x_versions)
+
+        if use_maxnet:
+            y_final = self._maxnet(scores_accum)
+            idx = int(np.argmax(y_final))
+        else:
+            idx = int(np.argmax(scores_accum))
+
         if return_scores:
-            return self.labels[idx], s
+            return self.labels[idx], scores_accum
         return self.labels[idx]
 
 def build_prototypes(N):
@@ -225,7 +270,13 @@ def load_network_from_file(filepath):
     """
     data = np.load(filepath, allow_pickle=True)
     labels = list(data["labels"])
-    protos = data["protos"].astype(np.float32)
+    protos = data["protos"]
+
+    # Handle different shapes: flatten if 3D (N_shapes, H, W)
+    if protos.ndim == 3:
+        protos = protos.reshape(protos.shape[0], -1)
+
+    protos = protos.astype(np.float32)
     protos_bip = to_bipolar(protos)
     net = HammingNetwork(protos_bip, labels=labels)
     return net, labels, protos
@@ -234,15 +285,3 @@ if __name__ == "__main__":
     # Crear red con prototipos para guardar con una media ponderada mayor al 0.3
     net, labels, protos = make_network_from_csv("dataset_centered")
     save_prototypes("prototypes/base_media.npz", labels, protos.reshape(len(labels), -1))
-
-    
-    # Crear red con prototipos para guardar con el calculo de kmeans, kmedoids y topk
-
-    net, labels, protos = make_network_from_csv_kmeans("dataset_centered")
-    save_prototypes("prototypes/base_kmeans.npz", labels, protos.reshape(len(labels), -1))
-    
-    net, labels, protos = make_network_from_csv_kmedoids("dataset_centered")
-    save_prototypes("prototypes/base_kmedoids.npz", labels, protos.reshape(len(labels), -1))
-
-    net, labels, protos = make_network_from_csv_topk("dataset_centered")
-    save_prototypes("prototypes/base_topk.npz", labels, protos.reshape(len(labels), -1))

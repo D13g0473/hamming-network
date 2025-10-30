@@ -1,6 +1,5 @@
 import os
 import numpy as np
-import extraer_prototipos as lpk
 
 def load_patterns_from_csv(base_path):
     patrones = {}
@@ -37,6 +36,13 @@ def load_patterns_from_csv(base_path):
 base_path = "dataset"
 patrones, etiquetas = load_patterns_from_csv(base_path)
 
+def ascii_show(arr, shape=(28,28)):
+    """Muestra patrón en ASCII"""
+    arr_2d = arr.reshape(shape)
+    chars = np.where(arr_2d > 0, "█", "·")
+    lines = ["".join(row) for row in chars]
+    return "\n".join(lines)
+
 for nombre, patron in patrones.items():
     print(f"Patrón para {nombre}")
-    print(lpk.ascii_show(patron, shape=(28,28))) 
+    print(ascii_show(patron, shape=(28,28)))
